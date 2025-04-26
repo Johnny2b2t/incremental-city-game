@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 // Import game data for tasks, recipes, and zones
 import { SKILL_RESOURCES_MAP, CRAFTING_RECIPES, COMBAT_ZONES, xpForNextLevel } from '../gameLogic/gameData';
-// Import the new minigame component
-import CombatMinigameView from './CombatMinigameView';
+// Import the new platformer view, remove old one
+// import CombatMinigameView from './CombatMinigameView'; 
+import PlatformerCombatView from './PlatformerCombatView';
 import HeroSkillView from './HeroSkillView';
 // Import AFK calculation and view
 import { calculateAfkRates } from '../gameLogic/formulas';
@@ -149,9 +150,9 @@ function CityView({
            <AfkInfoView rates={afkRates} />
       </div>
       
-      {/* Conditionally Render Combat Minigame */}
+      {/* Render Platformer Combat View */}
       {assignedZoneData && assignedHero && (
-         <CombatMinigameView 
+         <PlatformerCombatView 
             city={city}
             zoneData={assignedZoneData}
             lastOutcome={lastOutcome} 

@@ -2,19 +2,20 @@ import { RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP, COMBAT_ZONES, calculateHeroCom
 // Import GAME_TICK_MS - we need it for hourly calc. 
 // It's defined in App.jsx, maybe move it to gameData or config later?
 // For now, hardcode assumption of 1000ms tick.
-const GAME_TICK_MS = 1000;
+// const GAME_TICK_MS = 1000;
 
 /**
- * Calculates the resources gained per tick for a given city based on its current task.
+ * Calculates the resources gained during a time delta for a given city based on its current task.
  * @param {object} city - The city object from gameState.
  * @param {object|null} assignedHero - The hero object assigned to the city, or null.
  * @param {object} playerSkills - The player's skills object from gameState.
- * @returns {object} An object representing the resources gained this tick (e.g., { coal: 1, wood: 0 }).
+ * @param {number} deltaTime - The time elapsed in seconds since the last calculation.
+ * @returns {object} An object representing the resources gained (e.g., { coal: 0.5, wood: 0 }).
  */
-export function calculateResourceGain(city, assignedHero, playerSkills) {
+export function calculateResourceGain(city, assignedHero, playerSkills, deltaTime) {
     const gains = {}; // Start with empty gains
-    if (!city.currentTask) {
-        return gains; // No task, no gain
+    if (!city.currentTask || deltaTime <= 0) {
+        return gains; // No task or no time passed, no gain
     }
 
     const taskKey = city.currentTask;
@@ -29,54 +30,40 @@ export function calculateResourceGain(city, assignedHero, playerSkills) {
 
     // Check level requirement
     if (playerSkillLevel < skillData.levelReq) {
-        // Maybe return a very small amount or zero if level req not met?
-        return gains; // Or indicate somehow that the level is too low
+        return gains;
     }
 
-    // Base gain from the task definition
-    let amount = skillData.baseRate;
+    // Base gain rate from the task definition (per second)
+    let ratePerSecond = skillData.baseRate;
 
     // --- Apply Modifiers --- 
-    // 1. Skill Level Bonus (Example: +5% per level over requirement?)
     const levelDifference = playerSkillLevel - skillData.levelReq;
-    amount *= (1 + levelDifference * 0.05); 
-
-    // 2. City Level Bonus (Example: +10% per city level)
-    amount *= (1 + (city.level - 1) * 0.10);
-
-    // 3. City Specialization Bonus (Example: +50% if specialization matches skill)
-    //    (Need to define specializations that map to skills: e.g., 'miningSpec' -> 'mining')
-    //    if (city.specialization === `${relevantSkill}Spec`) { 
-    //        amount *= 1.5;
-    //    }
-
-    // 4. Hero Boosts (Example: Check for a matching yield boost)
+    ratePerSecond *= (1 + levelDifference * 0.05); 
+    ratePerSecond *= (1 + (city.level - 1) * 0.10);
     if (assignedHero && assignedHero.boosts) {
-        const heroBoostKey = `${relevantSkill}Yield`; // e.g., miningYield, farmingYield
+        const heroBoostKey = `${relevantSkill}Yield`; 
         if (assignedHero.boosts[heroBoostKey]) {
-            amount *= (1 + assignedHero.boosts[heroBoostKey]);
+            ratePerSecond *= (1 + assignedHero.boosts[heroBoostKey]);
         }
     }
 
-    // 5. Building Bonuses (TODO: Implement building effects)
-
-    // Add the calculated amount to the gains object
-    // The resource generated is usually the same as the task key (e.g., task 'coal' generates 'coal')
-    gains[taskKey] = amount;
+    // Calculate gain for the delta time
+    gains[taskKey] = ratePerSecond * deltaTime;
 
     return gains;
 }
 
 /**
- * Calculates the XP gained per tick for the relevant skill based on the city's task.
+ * Calculates the XP gained during a time delta for the relevant skill based on the city's task.
  * @param {object} city - The city object from gameState.
  * @param {object|null} assignedHero - The hero object assigned to the city, or null.
  * @param {object} playerSkills - The player's skills object from gameState.
+ * @param {number} deltaTime - The time elapsed in seconds since the last calculation.
  * @returns {number} The amount of XP gained for the relevant skill.
  */
-export function calculateXPGain(city, assignedHero, playerSkills) {
-    if (!city.currentTask) {
-        return 0; // No task, no XP
+export function calculateXPGain(city, assignedHero, playerSkills, deltaTime) {
+    if (!city.currentTask || deltaTime <= 0) {
+        return 0; // No task or no time passed, no XP
     }
 
     const taskKey = city.currentTask;
@@ -88,18 +75,15 @@ export function calculateXPGain(city, assignedHero, playerSkills) {
         return 0; // Invalid task or skill data
     }
 
-    // Check level requirement (maybe allow XP gain even if resource gain is blocked?)
     if (playerSkillLevel < skillData.levelReq) {
-        // Optional: Allow minimal XP gain even if level is too low?
-        // return skillData.xpGain * 0.1; 
         return 0; 
     }
 
-    let xpAmount = skillData.xpGain;
+    // Base XP gain rate (per second)
+    let xpRatePerSecond = skillData.xpGain;
 
-    // Apply Modifiers (Could add bonuses from heroes, buildings, etc. later)
-    // Example: Small bonus based on city level?
-    // xpAmount *= (1 + (city.level - 1) * 0.02);
+    // Calculate XP gain for the delta time
+    const xpAmount = xpRatePerSecond * deltaTime;
 
     return xpAmount;
 }
@@ -205,6 +189,7 @@ export function calculateCombatOutcome(city, combatZone, assignedHero) {
 
 /**
  * Estimates hourly gains for a city fighting in a specific zone.
+ * *Important: This still uses the simplified tick-based combat for estimation.*
  * @param {object} city - The city object.
  * @param {object} combatZone - The combat zone data.
  * @param {object|null} assignedHero - The assigned hero.
@@ -217,7 +202,8 @@ export function calculateAfkRates(city, combatZone, assignedHero) {
     const monster = combatZone.monsters[0]; // Base estimation on first monster
 
     // Simulate one combat outcome to get damage dealt
-    // Note: This uses the *current* stats, doesn't account for leveling up during the hour
+    // NOTE: This uses the simplified combat model which we might replace later.
+    //       For now, assume 1 'tick' of combat happens instantly for estimation.
     const baseOutcome = calculateCombatOutcome(city, combatZone, assignedHero);
 
     if (baseOutcome.damageDealt <= 0) {
@@ -230,11 +216,16 @@ export function calculateAfkRates(city, combatZone, assignedHero) {
         };
     }
 
-    const ticksToKill = Math.ceil(monster.hp / baseOutcome.damageDealt);
-    const killsPerTick = 1 / ticksToKill;
-    const ticksPerHour = 3600 / (GAME_TICK_MS / 1000); // Assumes GAME_TICK_MS is available or use 3600 directly if 1 tick = 1 sec
+    // Estimate time to kill based on simplified combat
+    const secondsToKill = Math.max(1, Math.ceil(monster.hp / baseOutcome.damageDealt)); // Assume at least 1 second per kill attempt cycle
+    const killsPerHour = 3600 / secondsToKill;
+    
+    // Remove dependency on GAME_TICK_MS
+    // const ticksToKill = Math.ceil(monster.hp / baseOutcome.damageDealt);
+    // const killsPerTick = 1 / ticksToKill;
+    // const ticksPerHour = 3600; // Since we assume 1 tick = 1 second here implicitly
+    // const killsPerHour = killsPerTick * ticksPerHour;
 
-    const killsPerHour = killsPerTick * ticksPerHour;
     const xpPerHour = (monster.xpReward || 0) * killsPerHour;
     const heroXpPerHour = (monster.xpReward || 0) * killsPerHour; // Using same XP for now
 

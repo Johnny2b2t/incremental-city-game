@@ -21,21 +21,66 @@ const platforms = [
     { id: 'p3', x: 200, y: MAP_HEIGHT - 130, width: 150, height: 10 },
 ];
 
+// Simple unique ID generator
+let enemyIdCounter = 0;
+const generateEnemyId = () => `enemy-${enemyIdCounter++}`;
+
 function PlatformerCombatView({ city, zoneData, lastOutcome, assignedHero }) {
     // --- Player State ---
     const [playerPos, setPlayerPos] = useState({ x: MAP_WIDTH / 2, y: MAP_HEIGHT - 50 });
     const [playerVel, setPlayerVel] = useState({ x: 0, y: 0 });
     const [isOnGround, setIsOnGround] = useState(false);
+    const [playerTookDamage, setPlayerTookDamage] = useState(false); // For visual flash
 
     // --- Input State ---
     const keysPressed = useRef({});
 
-    // --- Enemy State (Placeholder) ---
-    const [enemies, setEnemies] = useState([]); // We'll add enemies later
+    // --- Enemy State ---
+    const [enemies, setEnemies] = useState([]); // { id, x, y, width, height, platformId, direction, template, currentHp }
 
     // --- Game Loop Refs ---
     const animationFrameRef = useRef();
     const lastUpdateTimeRef = useRef(Date.now());
+
+    // --- Initialization ---
+    useEffect(() => {
+        if (!zoneData || !assignedHero) {
+            setEnemies([]);
+            return;
+        }
+        
+        // Reset player position maybe?
+        setPlayerPos({ x: MAP_WIDTH / 2, y: MAP_HEIGHT - 50 });
+        setPlayerVel({ x: 0, y: 0 });
+        setIsOnGround(false);
+
+        // Initialize Enemies
+        const monsterTemplate = zoneData.monsters[0];
+        const numEnemies = 5 + Math.floor(Math.random() * 6); // 5-10 enemies for platformer
+        const initialEnemies = [];
+        enemyIdCounter = 0;
+
+        for (let i = 0; i < numEnemies; i++) {
+            const platform = platforms[Math.floor(Math.random() * platforms.length)]; // Pick a random platform
+            const startX = platform.x + Math.random() * (platform.width - ENEMY_WIDTH); // Random x on platform
+            const startY = platform.y - ENEMY_HEIGHT; // Place on top of platform
+            
+            initialEnemies.push({
+                id: generateEnemyId(),
+                x: startX,
+                y: startY,
+                width: ENEMY_WIDTH,
+                height: ENEMY_HEIGHT,
+                platformId: platform.id,
+                direction: Math.random() < 0.5 ? 1 : -1, // Start moving left or right
+                template: monsterTemplate,
+                currentHp: monsterTemplate.hp, // Track visual HP later
+                maxHp: monsterTemplate.hp
+            });
+        }
+        setEnemies(initialEnemies);
+
+    }, [zoneData, assignedHero]); // Re-initialize if zone or hero changes
 
     // --- Input Handlers ---
     useEffect(() => {
@@ -50,6 +95,13 @@ function PlatformerCombatView({ city, zoneData, lastOutcome, assignedHero }) {
             window.removeEventListener('keyup', handleKeyUp);
         };
     }, []);
+
+    // --- Enemy Click Handler ---
+    const handleEnemyClick = (enemyId) => {
+        console.log(`Player clicked on enemy: ${enemyId}`);
+        // TODO: Trigger player attack animation/logic towards this enemy
+        // Note: Actual damage dealt still comes from the main game loop via lastOutcome
+    };
 
     // --- Game Loop --- 
     const gameLoop = useCallback(() => {
@@ -111,16 +163,57 @@ function PlatformerCombatView({ city, zoneData, lastOutcome, assignedHero }) {
              onGround = false;
         }
 
+        // --- Update Enemies --- 
+        const updatedEnemies = enemies.map(enemy => {
+            let newEnemyX = enemy.x + enemy.direction * ENEMY_MOVE_SPEED;
+            let newDirection = enemy.direction;
+            const platform = platforms.find(p => p.id === enemy.platformId);
+
+            // Check platform boundaries
+            if (platform) {
+                if (newEnemyX <= platform.x || newEnemyX + enemy.width >= platform.x + platform.width) {
+                    newDirection *= -1; // Reverse direction
+                    // Clamp position slightly to prevent getting stuck
+                    newEnemyX = Math.max(platform.x, Math.min(platform.x + platform.width - enemy.width, newEnemyX));
+                }
+            } else {
+                 // Enemy fell off somehow? Remove or reset? For now, keep going.
+            }
+
+            return { ...enemy, x: newEnemyX, direction: newDirection };
+        });
+
+        // --- Player-Enemy Collision Detection ---
+        let tookDamageThisFrame = false;
+        for (const enemy of updatedEnemies) {
+            const hit = newPos.x < enemy.x + enemy.width &&
+                       newPos.x + PLAYER_WIDTH > enemy.x &&
+                       newPos.y < enemy.y + enemy.height &&
+                       newPos.y + PLAYER_HEIGHT > enemy.y;
+            
+            if (hit) {
+                console.log(`Player collided with enemy ${enemy.id}!`);
+                tookDamageThisFrame = true;
+                 // TODO: Implement player damage effect (e.g., reduce visual HP, apply knockback?)
+                 // Maybe use lastOutcome.damageTaken from main loop for consistency?
+                break; // Only take damage from one enemy per frame
+            }
+        }
+        // Trigger visual flash for player damage
+        if (tookDamageThisFrame && !playerTookDamage) { // Check !playerTookDamage to prevent constant flashing
+             setPlayerTookDamage(true);
+             setTimeout(() => setPlayerTookDamage(false), 150); // Flash duration
+        }
+
         // --- Update State --- 
         setPlayerPos(newPos);
         setPlayerVel(newVel);
         setIsOnGround(onGround);
-
-        // --- TODO: Update Enemies --- 
+        setEnemies(updatedEnemies);
         
         // Continue loop
         animationFrameRef.current = requestAnimationFrame(gameLoop);
-    }, [playerPos, playerVel]); // Dependencies
+    }, [playerPos, playerVel, enemies, playerTookDamage]); // Add enemies & playerTookDamage
 
     // --- Loop Initialization ---
     useEffect(() => {
@@ -167,14 +260,31 @@ function PlatformerCombatView({ city, zoneData, lastOutcome, assignedHero }) {
                  top: `${playerPos.y}px`,
                  width: `${PLAYER_WIDTH}px`,
                  height: `${PLAYER_HEIGHT}px`,
-                 backgroundColor: 'darkblue', 
+                 backgroundColor: playerTookDamage ? 'red' : 'darkblue', // Flash red on hit
                  // TODO: Add player sprite later
             }}>
                  {/* TODO: Add health bar? Name tag? */} 
             </div>
 
-            {/* TODO: Render Enemies */}
-            {/* TODO: Render Damage Numbers / Effects */} 
+            {/* Render Enemies */}
+            {enemies.map(enemy => (
+                <div 
+                    key={enemy.id} 
+                    onClick={() => handleEnemyClick(enemy.id)} // Add click handler
+                    style={{
+                        position: 'absolute',
+                        left: `${enemy.x}px`,
+                        top: `${enemy.y}px`,
+                        width: `${enemy.width}px`,
+                        height: `${enemy.height}px`,
+                        backgroundColor: 'darkred',
+                        cursor: 'pointer', // Indicate clickable
+                        // TODO: Add enemy sprite later
+                    }}
+                >
+                    {/* TODO: Enemy health bar? */} 
+                </div>
+            ))}
             
         </div>
     );

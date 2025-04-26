@@ -1,26 +1,26 @@
 export const MINING_RESOURCES = {
-  coal: { name: 'Coal', levelReq: 1, xpGain: 1, baseRate: 1 },
-  copper: { name: 'Copper', levelReq: 5, xpGain: 5, baseRate: 0.8 },
-  iron: { name: 'Iron', levelReq: 10, xpGain: 10, baseRate: 0.6 },
-  gold: { name: 'Gold', levelReq: 20, xpGain: 25, baseRate: 0.4 },
-  platinum: { name: 'Platinum', levelReq: 35, xpGain: 50, baseRate: 0.2 },
-  titanium: { name: 'Titanium', levelReq: 50, xpGain: 100, baseRate: 0.1 },
-  diamond: { name: 'Diamond', levelReq: 75, xpGain: 250, baseRate: 0.05 },
+  coal: { name: 'Coal', levelReq: 1, xpGain: 1, baseRate: 1 }, // Rate/Sec, XP/Sec
+  copper: { name: 'Copper', levelReq: 5, xpGain: 5, baseRate: 0.8 }, // Rate/Sec, XP/Sec
+  iron: { name: 'Iron', levelReq: 10, xpGain: 10, baseRate: 0.6 }, // Rate/Sec, XP/Sec
+  gold: { name: 'Gold', levelReq: 20, xpGain: 25, baseRate: 0.4 }, // Rate/Sec, XP/Sec
+  platinum: { name: 'Platinum', levelReq: 35, xpGain: 50, baseRate: 0.2 }, // Rate/Sec, XP/Sec
+  titanium: { name: 'Titanium', levelReq: 50, xpGain: 100, baseRate: 0.1 }, // Rate/Sec, XP/Sec
+  diamond: { name: 'Diamond', levelReq: 75, xpGain: 250, baseRate: 0.05 }, // Rate/Sec, XP/Sec
 };
 
 // Placeholder for other skill types
 export const FARMING_RESOURCES = {
-    wheat: { name: 'Wheat', levelReq: 1, xpGain: 1, baseRate: 1.5 },
+    wheat: { name: 'Wheat', levelReq: 1, xpGain: 1, baseRate: 1.5 }, // Rate/Sec, XP/Sec
     // Add carrots, potatoes etc later
 };
 
 export const WOODCUTTING_RESOURCES = {
     // Remove generic logs if replaced by tiers
     // logs: { name: 'Logs', levelReq: 1, xpGain: 1, baseRate: 1.2 }, 
-    birch: { name: 'Birch Logs', levelReq: 1, xpGain: 1, baseRate: 1.2 },
-    oak: { name: 'Oak Logs', levelReq: 8, xpGain: 8, baseRate: 0.9 },
-    maple: { name: 'Maple Logs', levelReq: 15, xpGain: 15, baseRate: 0.7 },
-    redwood: { name: 'Redwood Logs', levelReq: 30, xpGain: 40, baseRate: 0.5 },
+    birch: { name: 'Birch Logs', levelReq: 1, xpGain: 1, baseRate: 1.2 }, // Rate/Sec, XP/Sec
+    oak: { name: 'Oak Logs', levelReq: 8, xpGain: 8, baseRate: 0.9 }, // Rate/Sec, XP/Sec
+    maple: { name: 'Maple Logs', levelReq: 15, xpGain: 15, baseRate: 0.7 }, // Rate/Sec, XP/Sec
+    redwood: { name: 'Redwood Logs', levelReq: 30, xpGain: 40, baseRate: 0.5 }, // Rate/Sec, XP/Sec
     // Add more woodcutting tiers later
 };
 
