@@ -5,8 +5,8 @@ import './App.css'
 import { initialGameState } from './gameLogic/initialState'
 import CityView from './components/CityView'
 import CraftingView from './components/CraftingView'
-import { calculateResourceGain, calculateXPGain } from './gameLogic/formulas'
-import { xpForNextLevel, RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP, CRAFTING_RECIPES } from './gameLogic/gameData'
+import { calculateResourceGain, calculateXPGain, calculateCombatOutcome } from './gameLogic/formulas'
+import { xpForNextLevel, RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP, CRAFTING_RECIPES, COMBAT_ZONES } from './gameLogic/gameData'
 
 const GAME_TICK_MS = 1000; // Update game state every second
 
@@ -20,51 +20,95 @@ function App() {
         const newState = JSON.parse(JSON.stringify(prevState));
         newState.gameTick += 1;
 
-        // Resource Generation & XP Gain Logic
-        newState.cities.forEach(city => {
-          if (!city.currentTask) return; // Skip if no task assigned
-
+        newState.cities.forEach((city, cityIndex) => {
           const assignedHero = newState.heroes.find(h => h.assignedCityId === city.id);
-          const relevantSkill = RESOURCE_SKILL_MAP[city.currentTask];
-          const skillInfo = newState.playerSkills[relevantSkill];
 
-          // 1. Calculate Resource Gain
-          const gains = calculateResourceGain(city, assignedHero, newState.playerSkills);
-          for (const [resource, amount] of Object.entries(gains)) {
-            if (newState.resources[resource] !== undefined) {
-              newState.resources[resource] += amount;
+          // --- Task Processing (Resource/XP Gain) ---
+          if (city.currentTask) { 
+            const relevantSkill = RESOURCE_SKILL_MAP[city.currentTask];
+            const skillInfo = newState.playerSkills[relevantSkill];
+
+            // 1. Calculate Resource Gain
+            const gains = calculateResourceGain(city, assignedHero, newState.playerSkills);
+            for (const [resource, amount] of Object.entries(gains)) {
+              if (newState.resources[resource] !== undefined) {
+                newState.resources[resource] += amount;
+              } else {
+                console.warn(`Generated unknown resource: ${resource}`);
+              }
+            }
+            // 2. Calculate Skill XP Gain
+            const xpGained = calculateXPGain(city, assignedHero, newState.playerSkills);
+            if (xpGained > 0 && relevantSkill && skillInfo) {
+              skillInfo.xp += xpGained;
+              // Level Up Check
+              let xpNeeded = xpForNextLevel(skillInfo.level);
+              while (skillInfo.xp >= xpNeeded) {
+                skillInfo.level += 1;
+                skillInfo.xp -= xpNeeded;
+                console.log(`${relevantSkill.toUpperCase()} leveled up to ${skillInfo.level}!`);
+                xpNeeded = xpForNextLevel(skillInfo.level); 
+              }
+            }
+          } // End Task Processing
+
+          // --- Combat Processing ---
+          if (city.assignedZone) {
+            const zoneData = COMBAT_ZONES[city.assignedZone];
+            if (zoneData) {
+                const combatOutcome = calculateCombatOutcome(city, zoneData, assignedHero);
+
+                if (combatOutcome.victory) {
+                    // Increment progress
+                    newState.cities[cityIndex].zoneProgress += combatOutcome.progressMade;
+                    
+                    // Add Loot
+                    for (const [lootResource, amount] of Object.entries(combatOutcome.lootGained)) {
+                        if (newState.resources[lootResource] !== undefined) {
+                            newState.resources[lootResource] += amount;
+                        } else {
+                            console.warn(`Gained unknown loot resource: ${lootResource}`);
+                        }
+                    }
+
+                    // Add Combat XP
+                    const combatSkillInfo = newState.playerSkills.combat;
+                    if (combatSkillInfo && combatOutcome.xpGained > 0) {
+                        combatSkillInfo.xp += combatOutcome.xpGained;
+                         // Level Up Check
+                        let xpNeeded = xpForNextLevel(combatSkillInfo.level);
+                        while (combatSkillInfo.xp >= xpNeeded) {
+                            combatSkillInfo.level += 1;
+                            combatSkillInfo.xp -= xpNeeded;
+                            console.log(`COMBAT leveled up to ${combatSkillInfo.level}!`);
+                            xpNeeded = xpForNextLevel(combatSkillInfo.level); 
+                        }
+                    }
+
+                    // Check for Zone Clear
+                    if (newState.cities[cityIndex].zoneProgress >= zoneData.clearRequirement) {
+                        console.log(`City ${city.id} cleared ${zoneData.name}!`);
+                        // TODO: Implement zone clearing effects (unlock next zone? permanent bonus?)
+                        newState.cities[cityIndex].assignedZone = null; // Stop fighting after clear for now
+                        newState.cities[cityIndex].zoneProgress = 0;
+                    }
+                } else {
+                    // Defeat or no progress - handle if needed (e.g., damage penalty)
+                    // console.log(`City ${city.id} failed to make progress in ${zoneData.name}.`);
+                }
             } else {
-              console.warn(`Generated unknown resource: ${resource}`);
+                 console.warn(`City ${city.id} assigned to non-existent zone: ${city.assignedZone}`);
+                 newState.cities[cityIndex].assignedZone = null; // Clear invalid assignment
             }
-          }
+          } // End Combat Processing
 
-          // 2. Calculate XP Gain
-          const xpGained = calculateXPGain(city, assignedHero, newState.playerSkills);
-          if (xpGained > 0 && relevantSkill && skillInfo) {
-            skillInfo.xp += xpGained;
-
-            // 3. Check for Level Up
-            let xpNeeded = xpForNextLevel(skillInfo.level);
-            while (skillInfo.xp >= xpNeeded) {
-              skillInfo.level += 1;
-              skillInfo.xp -= xpNeeded;
-              console.log(`${relevantSkill.toUpperCase()} leveled up to ${skillInfo.level}!`);
-              xpNeeded = xpForNextLevel(skillInfo.level); // Update for next level check
-            }
-          }
-
-          // TODO: Add resource consumption
+          // TODO: Resource Consumption
         });
-
-        // TODO: Add Hero Specific EXP gain?
-        // TODO: Add City leveling logic
-        // TODO: Add Monster clearing logic / Combat results
 
         return newState;
       });
     }, GAME_TICK_MS);
 
-    // Cleanup interval on component unmount
     return () => clearInterval(gameInterval);
   }, []);
 
@@ -205,6 +249,25 @@ function App() {
     });
   };
 
+  // --- Combat Zone Assignment Logic ---
+  const assignCombatZone = (cityId, zoneKey) => {
+    setGameState(prevState => {
+        const newState = JSON.parse(JSON.stringify(prevState));
+        const cityIndex = newState.cities.findIndex(c => c.id === cityId);
+        if (cityIndex !== -1) {
+            // Reset progress if changing zones or assigning from null
+            if (newState.cities[cityIndex].assignedZone !== zoneKey) {
+                newState.cities[cityIndex].zoneProgress = 0; 
+            }
+            newState.cities[cityIndex].assignedZone = zoneKey; // Can be null to stop fighting
+            console.log(`City ${cityId} assigned to combat zone: ${zoneKey || 'None'}`);
+        } else {
+            console.error(`City ${cityId} not found for zone assignment.`);
+        }
+        return newState;
+    });
+  };
+
   // TODO: Add City Level Up Logic
 
   return (
@@ -264,6 +327,7 @@ function App() {
                 changeCitySpecialization={changeCitySpecialization}
                 changeCityTask={changeCityTask} 
                 craftItem={craftItem} // Pass down the updated craftItem
+                assignCombatZone={assignCombatZone} // Pass down the new function
               />
             ))}
           </div>

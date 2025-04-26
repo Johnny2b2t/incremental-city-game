@@ -8,6 +8,9 @@ export const initialGameState = {
     oak: 0,
     maple: 0,
     redwood: 0,
+    feathers: 0,
+    pork: 0,
+    milk: 0,
     gold: 0,
     coal: 0,
     copper: 0,
@@ -18,6 +21,7 @@ export const initialGameState = {
     farming: { level: 1, xp: 0 },
     woodcutting: { level: 1, xp: 0 },
     crafting: { level: 1, xp: 0 },
+    combat: { level: 1, xp: 0 },
   },
   heroes: [
     {
@@ -53,6 +57,8 @@ export const initialGameState = {
         defense: 0,
       },
       currentTask: 'mineCoal', // Specific task the city is performing (key from gameData.js)
+      assignedZone: null, // Key from COMBAT_ZONES or null
+      zoneProgress: 0,    // e.g., monsters defeated in current zone
       buildings: {
         housing: 1, // Example building
       },

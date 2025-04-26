@@ -1,4 +1,4 @@
-import { RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP } from './gameData';
+import { RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP, COMBAT_ZONES } from './gameData';
 
 /**
  * Calculates the resources gained per tick for a given city based on its current task.
@@ -98,6 +98,70 @@ export function calculateXPGain(city, assignedHero, playerSkills) {
     // xpAmount *= (1 + (city.level - 1) * 0.02);
 
     return xpAmount;
+}
+
+/**
+ * Simulates one tick of combat for a city in an assigned zone.
+ * @param {object} city - The city object.
+ * @param {object} combatZone - The combat zone data from COMBAT_ZONES.
+ * @param {object|null} assignedHero - The assigned hero, if any.
+ * @returns {object} An object describing the outcome: { victory: boolean, damageDealt: number, damageTaken: number, xpGained: number, lootGained: object, progressMade: number }
+ */
+export function calculateCombatOutcome(city, combatZone, assignedHero) {
+    const outcome = {
+        victory: false,
+        damageDealt: 0,
+        damageTaken: 0,
+        xpGained: 0,
+        lootGained: {},
+        progressMade: 0, // How much progress towards clearing (e.g., 1 for defeating one monster)
+    };
+
+    if (!combatZone || !combatZone.monsters || combatZone.monsters.length === 0) {
+        console.warn(`City ${city.id} assigned to invalid or empty zone.`);
+        return outcome;
+    }
+
+    // For simplicity, fight the first monster type in the zone
+    const monster = combatZone.monsters[0]; 
+
+    let cityAttack = city.combatStats.attack;
+    let cityDefense = city.combatStats.defense;
+
+    // Add Hero combat boosts (use combatPower directly for now?)
+    if (assignedHero && assignedHero.boosts?.combatPower) {
+        cityAttack += assignedHero.boosts.combatPower;
+        // Maybe heroes add defense too?
+        // cityDefense += (assignedHero.boosts.combatDefense || 0);
+    }
+
+    // Very simple combat calculation:
+    // Damage dealt = City Attack - Monster Defense (min 0)
+    // Damage taken = Monster Attack - City Defense (min 0)
+    outcome.damageDealt = Math.max(0, cityAttack - monster.defense);
+    outcome.damageTaken = Math.max(0, monster.attack - cityDefense);
+
+    // Did the city deal enough damage to "defeat" the monster this tick?
+    // (Simplification: Assume 1 tick = 1 encounter/attempt)
+    if (outcome.damageDealt >= monster.hp) {
+        outcome.victory = true;
+        outcome.xpGained = monster.xpReward; // Base XP reward
+        outcome.lootGained = { ...monster.loot }; // Copy loot
+        outcome.progressMade = 1; // Defeated one monster
+
+        // TODO: Apply combat skill level bonuses to XP/loot?
+        // TODO: Apply hero loot/xp bonuses?
+    } else {
+        // Monster survived, no rewards, no progress
+        outcome.victory = false;
+    }
+    
+    // TODO: Damage taken currently does nothing - implement city HP or repair costs?
+    if(outcome.damageTaken > 0) {
+        // console.log(`City ${city.id} took ${outcome.damageTaken} damage.`);
+    }
+
+    return outcome;
 }
 
 /**

@@ -64,4 +64,52 @@ export const SKILL_RESOURCES_MAP = {
     farming: FARMING_RESOURCES,
     woodcutting: WOODCUTTING_RESOURCES,
     crafting: CRAFTING_RECIPES, 
+};
+
+export const COMBAT_ZONES = {
+    zoneGoblin: {
+        name: "Goblin Camp",
+        levelReq: 3,
+        monsters: [
+            { name: "Goblin", hp: 10, attack: 2, defense: 1, xpReward: 5, loot: { gold: 1 } },
+        ],
+        clearRequirement: 10,
+    },
+    zoneSpider: {
+        name: "Spider Nest",
+        levelReq: 8,
+        monsters: [
+            { name: "Giant Spider", hp: 25, attack: 5, defense: 3, xpReward: 15, loot: { gold: 3 } },
+        ],
+        clearRequirement: 5,
+    },
+    zoneChicken: {
+        name: "Chicken Coop",
+        levelReq: 1,
+        monsters: [
+            { name: "Chicken", hp: 5, attack: 1, defense: 0, xpReward: 2, loot: { feathers: 1 } },
+        ],
+        clearRequirement: 15,
+    },
+    zonePig: {
+        name: "Pig Pen",
+        levelReq: 1,
+        monsters: [
+            { name: "Pig", hp: 8, attack: 1, defense: 1, xpReward: 3, loot: { pork: 1 } },
+        ],
+        clearRequirement: 12,
+    },
+    zoneCow: {
+        name: "Cow Pasture",
+        levelReq: 4,
+        monsters: [
+            { name: "Cow", hp: 20, attack: 2, defense: 2, xpReward: 10, loot: { milk: 1 } },
+        ],
+        clearRequirement: 8,
+    },
+};
+
+// Map zone keys to their skill type (for potential future skill association)
+export const ZONE_SKILL_MAP = {
+    ...Object.keys(COMBAT_ZONES).reduce((acc, key) => ({ ...acc, [key]: 'combat' }), {}),
 }; 
