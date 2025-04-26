@@ -231,7 +231,28 @@ export const calculateHeroCombatStats = (hero) => {
     calculated.defense += (level - 1) * 0.5;
     calculated.magicAttack += (level -1) * 1; 
 
-    // TODO: Apply bonuses from learned skills
+    // --- Apply bonuses from learned PASSIVE skills --- 
+    if (hero.learnedSkills) {
+        for (const [skillKey, skillLevel] of Object.entries(hero.learnedSkills)) {
+            const skillData = HERO_SKILLS[skillKey];
+            if (skillData && skillData.effect?.type === 'passive' && skillLevel > 0) {
+                const effect = skillData.effect;
+                const targetStat = effect.targetStat; // e.g., 'attack', 'defense'
+                
+                if (calculated[targetStat] !== undefined) {
+                    if (effect.multiplier) {
+                        // Assume multiplier applies per level for stacking passives, adjust if needed
+                        const totalMultiplier = 1 + (effect.multiplier - 1) * skillLevel;
+                        calculated[targetStat] *= totalMultiplier;
+                    } else if (effect.flatBonus) {
+                         // Assume flat bonus applies per level
+                         calculated[targetStat] += effect.flatBonus * skillLevel;
+                    } // Add other passive types later (e.g., crit chance bonus)
+                     console.log(`Applied passive ${skillKey} (Lvl ${skillLevel}) to ${targetStat}`);
+                }
+            }
+        }
+    }
 
     // Ensure non-negative
     for (const key in calculated) {

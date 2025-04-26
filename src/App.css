@@ -1,49 +1,49 @@
+/* Remove default #root centering, handled in index.css */
+/* 
 #root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
 }
+*/
 
-/* Keep existing logo styles */
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
+/* Remove logo styles unless you plan to use them */
+/*
+.logo { ... }
+.logo:hover { ... }
+...
+*/
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* Remove old .card style */
+/* .card { ... } */
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
+/* Remove old .read-the-docs */
+/* .read-the-docs { ... } */
 
 
-/* Add some basic game layout styling */
+/* Remove old general list styling, handled better in index.css */
+/* 
+ul {
+  list-style: none;
+  padding-left: 15px;
+}
+li {
+  margin-bottom: 5px;
+}
+*/
+
+/* Remove old general button styling, handled better in index.css */
+/* 
+button {
+  margin-left: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+} 
+*/
+
+/* Remove old .game-container styling, now uses .section-container */
+/* 
 .game-container {
   margin-top: 2rem;
   padding: 1rem;
@@ -51,26 +51,48 @@
   border-radius: 8px;
   text-align: left;
 }
+*/
 
-/* Style CityView and other components for clarity */
+/* Remove old .city-view styling, specific styles are inline or in index.css */
+/* 
 .city-view {
   border: 1px solid lightblue;
   padding: 10px;
   margin-bottom: 15px;
 }
+*/
 
-/* Style lists for better readability */
-ul {
-  list-style: none;
-  padding-left: 15px;
+/* --- NEW STYLES --- */
+
+/* Style for the selected city in the overview */
+.city-summary.selected {
+    border-color: #0d6efd; /* Bootstrap primary blue */
+    background-color: #e7f1ff;
 }
 
-li {
-  margin-bottom: 5px;
+/* Specific button sizes or margins if needed */
+.hero-skill-view button,
+.city-summary button {
+    font-size: 0.8em;
+    padding: 2px 5px; 
 }
 
-button {
-  margin-left: 10px;
-  padding: 5px 10px;
-  cursor: pointer;
+/* Task/Zone Selectors Spacing */
+.task-selection select,
+.combat-assignment select {
+    margin-right: 10px; /* Add space between dropdowns */
+    min-width: 120px; /* Give dropdowns some base width */
+    padding: 0.3em 0.6em;
+    font-size: 0.9em;
+}
+
+/* Adjust AFK info view spacing slightly */
+.afk-info-view {
+    margin-top: 10px;
+}
+
+/* Small text helper */
+small {
+    color: #6c757d; /* Bootstrap secondary text color */
+    font-size: 0.85em;
 } 

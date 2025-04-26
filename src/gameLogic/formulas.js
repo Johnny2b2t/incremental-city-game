@@ -129,59 +129,77 @@ export function calculateCombatOutcome(city, combatZone, assignedHero) {
     }
     const monster = combatZone.monsters[0]; 
 
-    // --- Calculate Total Combat Stats ---
-    let totalAttack = city.combatStats.attack; // Start with equipment 
-    let totalDefense = city.combatStats.defense;
-    let totalMagicAttack = 0; // Base magic attack from equipment? Probably 0
-    // Add other potential stats derived from hero (speed, crit)
-
-    if (assignedHero) {
-        // Calculate hero's contribution based on stats, level, skills (TODO: skill part)
-        const heroCombatStats = calculateHeroCombatStats(assignedHero);
-        
-        totalAttack += heroCombatStats.attack;
-        totalDefense += heroCombatStats.defense;
-        totalMagicAttack += heroCombatStats.magicAttack;
-        // TODO: Factor in attackSpeed, critChance?
-
-        // --- Apply Active Skill Effects (Simplification for now) ---
-        // This is tricky for an idle tick. Let's assume basic attack for now.
-        // Later, we could add a chance to use a learned skill like Fireball.
-        // Example: if (assignedHero.learnedSkills.fireball && Math.random() < 0.2) { ... }
-        
-    } else {
-        // Militia stats if no hero?
+    // --- Calculate Base Hero Stats (including passives) ---
+    const heroBaseStats = assignedHero ? calculateHeroCombatStats(assignedHero) : { attack: 0, defense: 0, magicAttack: 0 };
+    
+    // --- Determine Active Skill to Use (Simple: highest level learned active skill) ---
+    let primarySkillKey = null;
+    let primarySkillLevel = 0;
+    let primarySkillData = null;
+    if (assignedHero && assignedHero.learnedSkills) {
+        for (const [skillKey, skillLevel] of Object.entries(assignedHero.learnedSkills)) {
+            const skillData = HERO_SKILLS[skillKey];
+            if (skillData?.effect?.type.includes('active') && skillLevel > primarySkillLevel) {
+                primarySkillKey = skillKey;
+                primarySkillLevel = skillLevel;
+                primarySkillData = skillData;
+            }
+        }
     }
-    
-    totalAttack = Math.max(0, totalAttack);
-    totalDefense = Math.max(0, totalDefense);
-    totalMagicAttack = Math.max(0, totalMagicAttack);
 
-    // --- Simple Combat Calculation ---
-    // Incorporate magic attack vs potentially magic resist later
-    const physicalDamage = Math.max(0, totalAttack - monster.defense);
-    const magicDamage = Math.max(0, totalMagicAttack - (monster.magicResist || 0)); // Assume monsters might have magic resist
-    outcome.damageDealt = physicalDamage + magicDamage; // Total damage
+    // --- Calculate Total Combat Stats & Damage ---
+    let totalAttack = city.combatStats.attack; // Equipment Attack
+    let totalDefense = city.combatStats.defense + heroBaseStats.defense; // Equipment + Hero Defense
+    let totalMagicAttack = 0 + heroBaseStats.magicAttack; // Equipment(0) + Hero Magic Attack
     
-    outcome.damageTaken = Math.max(0, monster.attack - totalDefense); // Only physical defense for now
+    let finalDamage = 0;
 
-    // --- Determine Outcome ---
+    if (primarySkillData) {
+        // --- Damage Calculation based on Active Skill --- 
+        console.log(`Using skill: ${primarySkillKey} Lvl ${primarySkillLevel}`);
+        const effect = primarySkillData.effect;
+        const statValue = assignedHero.stats[effect.stat] || 0; // STR, DEX, or INT value
+        
+        // Example: Skill damage = (Base Stat * Multiplier * Skill Level Mod) + Equipment Bonus
+        // Adjust this formula as needed!
+        const skillLevelMultiplier = 1 + (primarySkillLevel - 1) * 0.1; // +10% damage per level past 1
+        const baseSkillDamage = statValue * effect.damageMultiplier * skillLevelMultiplier;
+
+        if (effect.type === 'active_magic_attack') {
+             // Apply magic attack from skill + hero base magic attack + equipment?
+             // Let skill overwrite base magic attack for now
+             finalDamage = Math.max(0, baseSkillDamage + city.combatStats.magicAttack - (monster.magicResist || 0));
+        } else { // 'active_attack'
+            // Apply physical attack from skill + equipment attack
+            finalDamage = Math.max(0, baseSkillDamage + totalAttack - monster.defense);
+        }
+        // TODO: Implement status effects (stun chance, etc.)
+
+    } else {
+        // --- Damage Calculation based on Base Stats + Equipment (No Active Skill) ---
+        totalAttack += heroBaseStats.attack; // Add hero base attack if no skill used
+        totalAttack = Math.max(0, totalAttack);
+        totalMagicAttack = Math.max(0, totalMagicAttack);
+        
+        const physicalDamage = Math.max(0, totalAttack - monster.defense);
+        const magicDamage = Math.max(0, totalMagicAttack - (monster.magicResist || 0));
+        finalDamage = physicalDamage + magicDamage;
+    }
+
+    outcome.damageDealt = finalDamage;
+    outcome.damageTaken = Math.max(0, monster.attack - totalDefense); // Defense calculation remains the same for now
+
+    // --- Determine Outcome --- 
     if (outcome.damageDealt >= monster.hp) {
         outcome.victory = true;
         outcome.xpGained = monster.xpReward;      
         outcome.heroXpGained = monster.xpReward; 
         outcome.lootGained = { ...monster.loot }; 
         outcome.progressMade = 1; 
-
-        // TODO: Apply global combat skill level bonuses?
-        // TODO: Apply hero specific loot/xp bonuses from their own boost list?
-
     } else {
         outcome.victory = false;
     }
-    
-    // TODO: Implement effect of damageTaken on city/hero
-    
+        
     return outcome;
 }
 

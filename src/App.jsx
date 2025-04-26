@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { initialGameState } from './gameLogic/initialState'
 import CityView from './components/CityView'
@@ -109,46 +109,54 @@ const simulateTick = (currentState) => {
 // Takes the *current* state and returns the *next* state after one tick
 // ADDED: Optional targetCityId to only simulate one specific city
 const simulateTickWithStatGain = (currentState, targetCityId = null) => {
-    const newState = JSON.parse(JSON.stringify(currentState));
-    // Only increment global gameTick if not simulating a specific target (i.e., in main loop)
+    // Create a shallow copy for the top level
+    let newState = { ...currentState };
+
+    // Only increment global gameTick if not simulating a specific target
     if (!targetCityId) {
-        newState.gameTick += 1;
+        newState.gameTick = (newState.gameTick || 0) + 1;
     }
 
-    newState.cities.forEach((city, cityIndex) => {
-        // If a target is specified, only process that city
-        // If no target is specified (main loop), only process the currently selected/active city
+    // Use .map for immutable updates to cities and heroes arrays
+    // Keep track of changes to global resources and skills separately
+    let newResources = { ...newState.resources };
+    let newPlayerSkills = { ...newState.playerSkills };
+    let newHeroes = [...newState.heroes]; // Shallow copy heroes array
+
+    newState.cities = newState.cities.map((city, cityIndex) => {
         const isActiveTarget = targetCityId === city.id;
-        const isActiveInMainLoop = !targetCityId && currentState.selectedCityId === city.id; 
-        
+        const isActiveInMainLoop = !targetCityId && currentState.selectedCityId === city.id;
+
         if (isActiveTarget || isActiveInMainLoop) {
-             // --- This city is active for this simulation tick --- 
-            const assignedHero = newState.heroes.find(h => h.assignedCityId === city.id);
-            const heroIndex = assignedHero ? newState.heroes.findIndex(h => h.id === assignedHero.id) : -1;
+            // --- This city is active --- 
+            let updatedCity = { ...city }; // Shallow copy the active city
+            const assignedHero = newHeroes.find(h => h.assignedCityId === city.id);
+            const heroIndex = assignedHero ? newHeroes.findIndex(h => h.id === assignedHero.id) : -1;
 
             // --- Task Processing --- 
             if (city.currentTask) {
-                const relevantSkill = RESOURCE_SKILL_MAP[city.currentTask];
-                const skillInfo = newState.playerSkills[relevantSkill];
-                if (skillInfo) { // Check if skill exists
-                    const gains = calculateResourceGain(city, assignedHero, newState.playerSkills);
+                const relevantSkillKey = RESOURCE_SKILL_MAP[city.currentTask];
+                const currentSkillInfo = newPlayerSkills[relevantSkillKey];
+                if (currentSkillInfo) {
+                    const gains = calculateResourceGain(city, assignedHero, newPlayerSkills);
                     for (const [resource, amount] of Object.entries(gains)) {
-                        if (newState.resources[resource] !== undefined) {
-                            newState.resources[resource] += amount;
-                        } else {
-                            console.warn(`Generated unknown resource: ${resource}`);
+                        if (newResources[resource] !== undefined) {
+                            newResources[resource] = (newResources[resource] || 0) + amount;
                         }
                     }
-                    const xpGained = calculateXPGain(city, assignedHero, newState.playerSkills);
+                    const xpGained = calculateXPGain(city, assignedHero, newPlayerSkills);
                     if (xpGained > 0) {
-                        skillInfo.xp += xpGained;
-                        let xpNeeded = xpForNextLevel(skillInfo.level);
-                        while (skillInfo.xp >= xpNeeded) {
-                            skillInfo.level += 1;
-                            skillInfo.xp -= xpNeeded;
-                            console.log(`${relevantSkill.toUpperCase()} leveled up to ${skillInfo.level}!`);
-                            xpNeeded = xpForNextLevel(skillInfo.level);
+                        let updatedSkillInfo = { ...currentSkillInfo };
+                        updatedSkillInfo.xp += xpGained;
+                        let xpNeeded = xpForNextLevel(updatedSkillInfo.level);
+                        while (updatedSkillInfo.xp >= xpNeeded) {
+                            updatedSkillInfo.level += 1;
+                            updatedSkillInfo.xp -= xpNeeded;
+                             console.log(`${relevantSkillKey.toUpperCase()} leveled up to ${updatedSkillInfo.level}!`);
+                            xpNeeded = xpForNextLevel(updatedSkillInfo.level);
                         }
+                        // Update the specific skill in the new skills object
+                        newPlayerSkills = { ...newPlayerSkills, [relevantSkillKey]: updatedSkillInfo };
                     }
                 }
             }
@@ -159,56 +167,60 @@ const simulateTickWithStatGain = (currentState, targetCityId = null) => {
                 if (zoneData) {
                     const combatOutcome = calculateCombatOutcome(city, zoneData, assignedHero);
                     if (combatOutcome.victory) {
-                        newState.cities[cityIndex].zoneProgress += combatOutcome.progressMade;
+                        updatedCity.zoneProgress = (updatedCity.zoneProgress || 0) + combatOutcome.progressMade;
                         for (const [lootResource, amount] of Object.entries(combatOutcome.lootGained)) {
-                            if (newState.resources[lootResource] !== undefined) {
-                                newState.resources[lootResource] += amount;
-                            } else {
-                                console.warn(`Gained unknown loot resource: ${lootResource}`);
+                            if (newResources[lootResource] !== undefined) {
+                                newResources[lootResource] = (newResources[lootResource] || 0) + amount;
                             }
                         }
-                        const combatSkillInfo = newState.playerSkills.combat;
+                        const combatSkillInfo = newPlayerSkills.combat;
                         if (combatSkillInfo && combatOutcome.xpGained > 0) {
-                            combatSkillInfo.xp += combatOutcome.xpGained;
-                            let xpNeeded = xpForNextLevel(combatSkillInfo.level);
-                            while (combatSkillInfo.xp >= xpNeeded) {
-                                combatSkillInfo.level += 1;
-                                combatSkillInfo.xp -= xpNeeded;
-                                console.log(`COMBAT leveled up to ${combatSkillInfo.level}!`);
-                                xpNeeded = xpForNextLevel(combatSkillInfo.level);
+                             let updatedCombatSkill = { ...combatSkillInfo };
+                             updatedCombatSkill.xp += combatOutcome.xpGained;
+                             let xpNeeded = xpForNextLevel(updatedCombatSkill.level);
+                            while (updatedCombatSkill.xp >= xpNeeded) {
+                                updatedCombatSkill.level += 1;
+                                updatedCombatSkill.xp -= xpNeeded;
+                                console.log(`COMBAT leveled up to ${updatedCombatSkill.level}!`);
+                                xpNeeded = xpForNextLevel(updatedCombatSkill.level);
                             }
+                             newPlayerSkills = { ...newPlayerSkills, combat: updatedCombatSkill };
                         }
                         if (assignedHero && heroIndex !== -1 && combatOutcome.heroXpGained > 0) {
-                            const heroInfo = newState.heroes[heroIndex];
-                            heroInfo.xp += combatOutcome.heroXpGained;
-                            let heroXpNeeded = xpForNextLevel(heroInfo.level);
-                            
-                            let leveledUp = false;
-                            while (heroInfo.xp >= heroXpNeeded) {
-                                heroInfo.level += 1;
-                                heroInfo.xp -= heroXpNeeded;
-                                heroInfo.skillPoints += 1; 
-                                grantLevelUpStats(heroInfo); // Call the new function to grant stats
-                                console.log(`Hero ${heroInfo.name} leveled up to ${heroInfo.level}! (+1 SP, +Stats)`);
-                                heroXpNeeded = xpForNextLevel(heroInfo.level); 
-                                leveledUp = true;
+                            let updatedHeroInfo = { ...newHeroes[heroIndex] }; // Copy hero being updated
+                            updatedHeroInfo.xp = (updatedHeroInfo.xp || 0) + combatOutcome.heroXpGained;
+                            let heroXpNeeded = xpForNextLevel(updatedHeroInfo.level);
+                            while (updatedHeroInfo.xp >= heroXpNeeded) {
+                                updatedHeroInfo.level = (updatedHeroInfo.level || 0) + 1;
+                                updatedHeroInfo.xp -= heroXpNeeded;
+                                updatedHeroInfo.skillPoints = (updatedHeroInfo.skillPoints || 0) + 1;
+                                // IMPORTANT: grantLevelUpStats modifies the object passed in
+                                grantLevelUpStats(updatedHeroInfo); 
+                                console.log(`Hero ${updatedHeroInfo.name} leveled up to ${updatedHeroInfo.level}! (+1 SP, +Stats)`);
+                                heroXpNeeded = xpForNextLevel(updatedHeroInfo.level);
                             }
-                            // TODO: Trigger recalculation of derived stats if needed immediately
+                            // Place the updated hero back into the new heroes array
+                            newHeroes[heroIndex] = updatedHeroInfo; 
                         }
-                        if (newState.cities[cityIndex].zoneProgress >= zoneData.clearRequirement) {
+                        if (updatedCity.zoneProgress >= zoneData.clearRequirement) {
                             console.log(`City ${city.id} completed a clear cycle in ${zoneData.name}!`);
-                            newState.cities[cityIndex].zoneProgress = 0;
+                            updatedCity.zoneProgress = 0;
                         }
                     }
                 }
             } // End Combat
-            
-        } else {
-             // --- This city is inactive for this simulation tick --- 
-             // Do nothing for inactive cities during the simulation tick itself
-             // We handle setting the timestamp on selection change
+             return updatedCity; // Return the updated city object for the .map
         }
-    }); // End cities
+        
+        // If inactive, return the original city object (no changes)
+        return city; 
+    });
+
+    // Assign the potentially updated collections back to the new state object
+    newState.resources = newResources;
+    newState.playerSkills = newPlayerSkills;
+    newState.heroes = newHeroes;
+
     return newState;
 }; // End simulateTickWithStatGain
 
@@ -269,15 +281,32 @@ function App() {
   }, [selectedCityId]);
 
   // --- Save State Effect ---
+  const saveTimeoutRef = useRef(null); // Ref to store timeout ID
+
   useEffect(() => {
-    // This effect runs whenever gameState changes
-    try {
-      localStorage.setItem(GAME_SAVE_KEY, JSON.stringify(gameState));
-    } catch (e) {
-      console.error("Failed to save game state:", e);
-      // Handle potential storage full errors later?
+    // Clear any existing timeout when gameState changes
+    if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
     }
-  }, [gameState]); // Dependency array ensures this runs when gameState updates
+
+    // Set a new timeout to save after a delay (e.g., 2 seconds)
+    saveTimeoutRef.current = setTimeout(() => {
+        try {
+            console.log("Auto-saving game state..."); // Log when saving
+            localStorage.setItem(GAME_SAVE_KEY, JSON.stringify(gameState));
+        } catch (e) {
+            console.error("Failed to auto-save game state:", e);
+        }
+        saveTimeoutRef.current = null; // Clear ref after save
+    }, 2000); // 2000ms = 2 seconds delay
+
+    // Cleanup function to clear timeout if component unmounts before save
+    return () => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+    };
+  }, [gameState]); // Still depends on gameState, but logic inside debounces
 
   // --- Crafting Logic ---
   const craftItem = (recipeKey, cityId) => {
@@ -439,76 +468,61 @@ function App() {
 
   const allocateStatPoint = (heroId, statKey) => {
     setGameState(prevState => {
-      const newState = JSON.parse(JSON.stringify(prevState));
-      const heroIndex = newState.heroes.findIndex(h => h.id === heroId);
-      if (heroIndex === -1) {
-        console.error(`Hero ${heroId} not found for stat allocation.`);
-        return prevState;
-      }
-      const hero = newState.heroes[heroIndex];
+      const heroIndex = prevState.heroes.findIndex(h => h.id === heroId);
+      if (heroIndex === -1) return prevState;
+      const hero = prevState.heroes[heroIndex];
+      if (hero.skillPoints <= 0 || hero.stats[statKey] === undefined) return prevState;
 
-      // Check skill points
-      if (hero.skillPoints <= 0) {
-        console.warn(`Hero ${heroId} has no skill points to allocate.`);
-        return prevState;
-      }
-
-      // Check if stat exists
-      if (hero.stats[statKey] === undefined) {
-         console.error(`Invalid stat key ${statKey} for hero ${heroId}.`);
-         return prevState;
-      }
-
-      // Apply changes
-      hero.skillPoints -= 1;
-      hero.stats[statKey] += 1;
-      console.log(`Allocated 1 point to ${statKey} for ${hero.name}.`);
-
-      return newState;
+      // Immutable update
+      const newHeroes = prevState.heroes.map((h, index) => {
+          if (index === heroIndex) {
+              return {
+                  ...h,
+                  skillPoints: h.skillPoints - 1,
+                  stats: { 
+                      ...h.stats, 
+                      [statKey]: h.stats[statKey] + 1 
+                  }
+              };
+          }
+          return h;
+      });
+      console.log(`Allocated 1 point to ${statKey} for ${newHeroes[heroIndex].name}.`);
+      return { ...prevState, heroes: newHeroes };
     });
   };
 
   const learnHeroSkill = (heroId, skillKey) => {
     setGameState(prevState => {
-        const newState = JSON.parse(JSON.stringify(prevState));
-        const heroIndex = newState.heroes.findIndex(h => h.id === heroId);
-        if (heroIndex === -1) {
-            console.error(`Hero ${heroId} not found for skill learning.`);
-            return prevState;
-        }
-        const hero = newState.heroes[heroIndex];
+        const heroIndex = prevState.heroes.findIndex(h => h.id === heroId);
+        if (heroIndex === -1) return prevState;
+        const hero = prevState.heroes[heroIndex];
         const skillData = HERO_SKILLS[skillKey];
-
-        if (!skillData) {
-            console.error(`Skill ${skillKey} not found.`);
-            return prevState;
-        }
-
-        // Check Requirements
+        if (!skillData) return prevState;
         const currentLevel = hero.learnedSkills[skillKey] || 0;
-        if (hero.level < skillData.levelReq) {
-            console.warn(`Hero ${hero.name} level too low for ${skillData.name}.`);
+        if (hero.level < skillData.levelReq || 
+            hero.skillPoints < skillData.cost || 
+            currentLevel >= skillData.maxLevel || 
+            hero.class !== skillData.class) {
             return prevState;
-        }
-        if (hero.skillPoints < skillData.cost) {
-            console.warn(`Hero ${hero.name} does not have enough skill points for ${skillData.name}.`);
-            return prevState;
-        }
-         if (currentLevel >= skillData.maxLevel) {
-            console.warn(`Hero ${hero.name} already maxed out ${skillData.name}.`);
-            return prevState;
-        }
-        if (hero.class !== skillData.class) {
-             console.warn(`Skill ${skillData.name} is not available for class ${hero.class}.`);
-             return prevState;
         }
 
-        // Apply Changes
-        hero.skillPoints -= skillData.cost;
-        hero.learnedSkills[skillKey] = currentLevel + 1;
-        console.log(`Hero ${hero.name} learned/leveled up ${skillData.name} to level ${currentLevel + 1}.`);
-
-        return newState;
+        // Immutable update
+        const newHeroes = prevState.heroes.map((h, index) => {
+            if (index === heroIndex) {
+                return {
+                    ...h,
+                    skillPoints: h.skillPoints - skillData.cost,
+                    learnedSkills: {
+                        ...h.learnedSkills,
+                        [skillKey]: currentLevel + 1
+                    }
+                };
+            }
+            return h;
+        });
+        console.log(`Hero ${newHeroes[heroIndex].name} learned/leveled up ${skillData.name} to level ${currentLevel + 1}.`);
+        return { ...prevState, heroes: newHeroes };
     });
   };
 
@@ -583,35 +597,35 @@ function App() {
   const upgradeCity = (cityId) => {
     setGameState(prevState => {
         const cityIndex = prevState.cities.findIndex(c => c.id === cityId);
-        if (cityIndex === -1) {
-            console.error(`City ${cityId} not found for upgrade.`);
-            return prevState;
-        }
+        if (cityIndex === -1) return prevState; // Already checked, but good practice
         const city = prevState.cities[cityIndex];
         const costs = calculateCityLevelUpCost(city);
-
-        // Check resources
+        // Check affordability again (state might have changed)
         for (const [resource, cost] of Object.entries(costs)) {
-             if ((prevState.resources[resource] || 0) < cost) {
-                 console.warn(`Not enough ${resource} to upgrade ${city.name}. Need ${cost}.`);
-                 // TODO: Add UI feedback
-                 return prevState;
-             }
+            if ((prevState.resources[resource] || 0) < cost) return prevState;
+        }
+        
+        // Create new resources object
+        let newResources = { ...prevState.resources };
+        for (const [resource, cost] of Object.entries(costs)) {
+            newResources[resource] -= cost;
         }
 
-        // Apply changes
-        const newState = JSON.parse(JSON.stringify(prevState));
-        const cityToUpdate = newState.cities[cityIndex];
+        // Create new cities array with the updated city
+        const newCities = prevState.cities.map((c, index) => {
+            if (index === cityIndex) {
+                return { ...c, level: c.level + 1 };
+            }
+            return c;
+        });
 
-        // Deduct costs
-        for (const [resource, cost] of Object.entries(costs)) {
-            newState.resources[resource] -= cost;
-        }
-        // Increase level
-        cityToUpdate.level += 1;
-        console.log(`Upgraded ${cityToUpdate.name} to level ${cityToUpdate.level}!`);
-
-        return newState;
+        console.log(`Upgraded ${newCities[cityIndex].name} to level ${newCities[cityIndex].level}!`);
+        // Return the new state object
+        return { 
+            ...prevState, 
+            resources: newResources, 
+            cities: newCities 
+        };
     });
   };
 
