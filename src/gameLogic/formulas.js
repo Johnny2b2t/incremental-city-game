@@ -1,4 +1,8 @@
-import { RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP, COMBAT_ZONES } from './gameData';
+import { RESOURCE_SKILL_MAP, SKILL_RESOURCES_MAP, COMBAT_ZONES, calculateHeroCombatStats, HERO_SKILLS } from './gameData';
+// Import GAME_TICK_MS - we need it for hourly calc. 
+// It's defined in App.jsx, maybe move it to gameData or config later?
+// For now, hardcode assumption of 1000ms tick.
+const GAME_TICK_MS = 1000;
 
 /**
  * Calculates the resources gained per tick for a given city based on its current task.
@@ -102,66 +106,131 @@ export function calculateXPGain(city, assignedHero, playerSkills) {
 
 /**
  * Simulates one tick of combat for a city in an assigned zone.
+ * Uses hero stats calculated via calculateHeroCombatStats + city equipment.
  * @param {object} city - The city object.
  * @param {object} combatZone - The combat zone data from COMBAT_ZONES.
- * @param {object|null} assignedHero - The assigned hero, if any.
- * @returns {object} An object describing the outcome: { victory: boolean, damageDealt: number, damageTaken: number, xpGained: number, lootGained: object, progressMade: number }
+ * @param {object|null} assignedHero - The assigned hero object (with level, class, base stats).
+ * @returns {object} An object describing the outcome: { victory: boolean, damageDealt: number, damageTaken: number, xpGained: number, lootGained: object, progressMade: number, heroXpGained: number }
  */
 export function calculateCombatOutcome(city, combatZone, assignedHero) {
     const outcome = {
         victory: false,
         damageDealt: 0,
         damageTaken: 0,
-        xpGained: 0,
+        xpGained: 0,       // For player combat skill
         lootGained: {},
-        progressMade: 0, // How much progress towards clearing (e.g., 1 for defeating one monster)
+        progressMade: 0, 
+        heroXpGained: 0    // XP specifically for the hero
     };
 
     if (!combatZone || !combatZone.monsters || combatZone.monsters.length === 0) {
         console.warn(`City ${city.id} assigned to invalid or empty zone.`);
         return outcome;
     }
-
-    // For simplicity, fight the first monster type in the zone
     const monster = combatZone.monsters[0]; 
 
-    let cityAttack = city.combatStats.attack;
-    let cityDefense = city.combatStats.defense;
+    // --- Calculate Total Combat Stats ---
+    let totalAttack = city.combatStats.attack; // Start with equipment 
+    let totalDefense = city.combatStats.defense;
+    let totalMagicAttack = 0; // Base magic attack from equipment? Probably 0
+    // Add other potential stats derived from hero (speed, crit)
 
-    // Add Hero combat boosts (use combatPower directly for now?)
-    if (assignedHero && assignedHero.boosts?.combatPower) {
-        cityAttack += assignedHero.boosts.combatPower;
-        // Maybe heroes add defense too?
-        // cityDefense += (assignedHero.boosts.combatDefense || 0);
+    if (assignedHero) {
+        // Calculate hero's contribution based on stats, level, skills (TODO: skill part)
+        const heroCombatStats = calculateHeroCombatStats(assignedHero);
+        
+        totalAttack += heroCombatStats.attack;
+        totalDefense += heroCombatStats.defense;
+        totalMagicAttack += heroCombatStats.magicAttack;
+        // TODO: Factor in attackSpeed, critChance?
+
+        // --- Apply Active Skill Effects (Simplification for now) ---
+        // This is tricky for an idle tick. Let's assume basic attack for now.
+        // Later, we could add a chance to use a learned skill like Fireball.
+        // Example: if (assignedHero.learnedSkills.fireball && Math.random() < 0.2) { ... }
+        
+    } else {
+        // Militia stats if no hero?
     }
+    
+    totalAttack = Math.max(0, totalAttack);
+    totalDefense = Math.max(0, totalDefense);
+    totalMagicAttack = Math.max(0, totalMagicAttack);
 
-    // Very simple combat calculation:
-    // Damage dealt = City Attack - Monster Defense (min 0)
-    // Damage taken = Monster Attack - City Defense (min 0)
-    outcome.damageDealt = Math.max(0, cityAttack - monster.defense);
-    outcome.damageTaken = Math.max(0, monster.attack - cityDefense);
+    // --- Simple Combat Calculation ---
+    // Incorporate magic attack vs potentially magic resist later
+    const physicalDamage = Math.max(0, totalAttack - monster.defense);
+    const magicDamage = Math.max(0, totalMagicAttack - (monster.magicResist || 0)); // Assume monsters might have magic resist
+    outcome.damageDealt = physicalDamage + magicDamage; // Total damage
+    
+    outcome.damageTaken = Math.max(0, monster.attack - totalDefense); // Only physical defense for now
 
-    // Did the city deal enough damage to "defeat" the monster this tick?
-    // (Simplification: Assume 1 tick = 1 encounter/attempt)
+    // --- Determine Outcome ---
     if (outcome.damageDealt >= monster.hp) {
         outcome.victory = true;
-        outcome.xpGained = monster.xpReward; // Base XP reward
-        outcome.lootGained = { ...monster.loot }; // Copy loot
-        outcome.progressMade = 1; // Defeated one monster
+        outcome.xpGained = monster.xpReward;      
+        outcome.heroXpGained = monster.xpReward; 
+        outcome.lootGained = { ...monster.loot }; 
+        outcome.progressMade = 1; 
 
-        // TODO: Apply combat skill level bonuses to XP/loot?
-        // TODO: Apply hero loot/xp bonuses?
+        // TODO: Apply global combat skill level bonuses?
+        // TODO: Apply hero specific loot/xp bonuses from their own boost list?
+
     } else {
-        // Monster survived, no rewards, no progress
         outcome.victory = false;
     }
     
-    // TODO: Damage taken currently does nothing - implement city HP or repair costs?
-    if(outcome.damageTaken > 0) {
-        // console.log(`City ${city.id} took ${outcome.damageTaken} damage.`);
+    // TODO: Implement effect of damageTaken on city/hero
+    
+    return outcome;
+}
+
+/**
+ * Estimates hourly gains for a city fighting in a specific zone.
+ * @param {object} city - The city object.
+ * @param {object} combatZone - The combat zone data.
+ * @param {object|null} assignedHero - The assigned hero.
+ * @returns {object|null} An object with estimated rates per hour (kills, xp, heroXp, loot), or null if calculation fails.
+ */
+export function calculateAfkRates(city, combatZone, assignedHero) {
+    if (!city || !combatZone || !combatZone.monsters || combatZone.monsters.length === 0) {
+        return null;
+    }
+    const monster = combatZone.monsters[0]; // Base estimation on first monster
+
+    // Simulate one combat outcome to get damage dealt
+    // Note: This uses the *current* stats, doesn't account for leveling up during the hour
+    const baseOutcome = calculateCombatOutcome(city, combatZone, assignedHero);
+
+    if (baseOutcome.damageDealt <= 0) {
+        // Cannot defeat the monster
+        return {
+            killsPerHour: 0,
+            xpPerHour: 0,
+            heroXpPerHour: 0,
+            lootPerHour: {}
+        };
     }
 
-    return outcome;
+    const ticksToKill = Math.ceil(monster.hp / baseOutcome.damageDealt);
+    const killsPerTick = 1 / ticksToKill;
+    const ticksPerHour = 3600 / (GAME_TICK_MS / 1000); // Assumes GAME_TICK_MS is available or use 3600 directly if 1 tick = 1 sec
+
+    const killsPerHour = killsPerTick * ticksPerHour;
+    const xpPerHour = (monster.xpReward || 0) * killsPerHour;
+    const heroXpPerHour = (monster.xpReward || 0) * killsPerHour; // Using same XP for now
+
+    const lootPerHour = {};
+    for (const [resource, amount] of Object.entries(monster.loot || {})) {
+        lootPerHour[resource] = amount * killsPerHour;
+    }
+
+    return {
+        killsPerHour,
+        xpPerHour,
+        heroXpPerHour,
+        lootPerHour
+    };
 }
 
 /**

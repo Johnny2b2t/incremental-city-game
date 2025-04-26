@@ -1,6 +1,12 @@
-import React from 'react';
-// Import game data for tasks and recipes
-import { SKILL_RESOURCES_MAP, CRAFTING_RECIPES } from '../gameLogic/gameData';
+import React, { useState, useMemo } from 'react';
+// Import game data for tasks, recipes, and zones
+import { SKILL_RESOURCES_MAP, CRAFTING_RECIPES, COMBAT_ZONES, xpForNextLevel } from '../gameLogic/gameData';
+// Import the new minigame component
+import CombatMinigameView from './CombatMinigameView';
+import HeroSkillView from './HeroSkillView';
+// Import AFK calculation and view
+import { calculateAfkRates } from '../gameLogic/formulas';
+import AfkInfoView from './AfkInfoView';
 
 // Define possible specializations (could also be imported from a config file)
 const SPECIALIZATIONS = ['general', 'farming', 'mining', 'lumber', 'fighting', 'crafting'];
@@ -14,13 +20,18 @@ function CityView({
     unassignHero, 
     changeCitySpecialization, 
     changeCityTask, 
-    craftItem // Receive craftItem function
+    craftItem, // Receive craftItem function
+    assignCombatZone, 
+    lastOutcome, // Receive lastOutcome prop
+    allocateStatPoint, // Receive allocateStatPoint
+    learnHeroSkill     // Receive learnHeroSkill
 }) {
   // Find the hero assigned to THIS city
   const assignedHero = heroes.find(hero => hero.assignedCityId === city.id);
   // Find heroes that are NOT assigned to ANY city
   const availableHeroes = heroes.filter(hero => !hero.assignedCityId);
   const craftingSkill = playerSkills.crafting;
+  const combatSkill = playerSkills.combat;
 
   // Determine available tasks based on player skill levels
   const availableTasks = {};
@@ -33,6 +44,11 @@ function CityView({
                                  .map(([key, data]) => ({ key, name: data.name, levelReq: data.levelReq }));
   }
 
+  // Determine available combat zones (basic: check combat level?)
+  const availableZones = Object.entries(COMBAT_ZONES)
+                             .filter(([key, zone]) => combatSkill.level >= zone.levelReq)
+                             .map(([key, zone]) => ({ key, name: zone.name, levelReq: zone.levelReq }));
+
   // Helper for crafting checks
   const canCraft = (recipe) => {
     if (craftingSkill.level < recipe.levelReq) return false;
@@ -41,6 +57,20 @@ function CityView({
     }
     return true;
   };
+
+  const assignedZoneData = city.assignedZone ? COMBAT_ZONES[city.assignedZone] : null;
+
+  // State to toggle skill view visibility
+  const [showSkillView, setShowSkillView] = useState(false);
+
+  // --- Calculate AFK Rates using useMemo --- 
+  // Recalculate only when relevant props change (city stats, hero stats, zone)
+  const afkRates = useMemo(() => {
+      if (city.assignedZone && assignedZoneData && assignedHero) {
+          return calculateAfkRates(city, assignedZoneData, assignedHero);
+      } 
+      return null;
+  }, [city, assignedZoneData, assignedHero]); // Dependencies for recalculation
 
   return (
     <div className="city-view" style={{ border: '1px solid #ccc', marginBottom: '15px', padding: '10px' }}>
@@ -95,6 +125,40 @@ function CityView({
           </select>
       </div>
       
+      {/* Combat Zone Assignment & Info */}
+      <div className="combat-assignment" style={{ marginTop: '10px' }}>
+          <h4>Assign Combat Zone:</h4>
+           <select 
+              value={city.assignedZone || ''} // Select current assigned zone
+              onChange={(e) => assignCombatZone(city.id, e.target.value || null)} // Pass null if default option selected
+              disabled={!availableZones.length} // Disable if no zones available
+           >
+               <option value="">-- Stop Fighting --</option>
+               {availableZones.map(zone => (
+                   <option key={zone.key} value={zone.key}>
+                       {zone.name} (Req Lvl {zone.levelReq})
+                   </option>
+               ))}
+           </select>
+           {city.assignedZone && (
+               <span style={{ marginLeft: '10px' }}>
+                   ({city.zoneProgress} / {COMBAT_ZONES[city.assignedZone]?.clearRequirement || '?'} Cleared)
+               </span>
+           )}
+           {/* Render AFK Info View */}
+           <AfkInfoView rates={afkRates} />
+      </div>
+      
+      {/* Conditionally Render Combat Minigame */}
+      {assignedZoneData && assignedHero && (
+         <CombatMinigameView 
+            city={city}
+            zoneData={assignedZoneData}
+            lastOutcome={lastOutcome} 
+            assignedHero={assignedHero}
+         />
+      )}
+
       {/* Specialization Display and Control */}
       <div>
         <span>Specialization: <strong>{city.specialization}</strong></span>
@@ -118,35 +182,59 @@ function CityView({
       {/* Add building display later? */}
 
       {/* Display Assigned Hero */}
-      <h3>Assigned Hero</h3>
-      {assignedHero ? (
-        <div>
-          <p>{assignedHero.name}</p>
-          {/* Display hero boosts */}
-          <ul>
-            {Object.entries(assignedHero.boosts).map(([boost, value]) => (
-              // Simple display, assuming boosts are percentage multipliers
-              <li key={boost}>{boost}: {value > 0 ? '+' : ''}{value * 100}%</li> 
-            ))}
-          </ul>
-          <button onClick={() => unassignHero(assignedHero.id)}>Unassign</button>
-        </div>
-      ) : (
-        <p>No hero assigned.</p>
-      )}
+      <div style={{ marginTop: '15px', borderTop: '1px dashed #eee', paddingTop: '10px' }}>
+          <h3>Assigned Hero</h3>
+          {assignedHero ? (
+            <div>
+              <p><strong>{assignedHero.name}</strong> - Lvl {assignedHero.level} {assignedHero.class}</p>
+              {/* Hero XP Bar */}
+              {(assignedHero.xp !== undefined && assignedHero.level !== undefined) && (
+                 <div style={{ fontSize: '0.9em'}}>
+                     XP: {Math.floor(assignedHero.xp)} / {xpForNextLevel(assignedHero.level)}
+                     {/* TODO: Add progress bar like skills view? */}
+                 </div>
+              )}
+              <p style={{fontSize: '0.9em'}}>Base Stats: Atk {assignedHero.baseAttack}, Def {assignedHero.baseDefense}</p>
+              {/* Display hero non-stat boosts if any */}
+              <ul>
+                {Object.entries(assignedHero.boosts || {}).map(([boost, value]) => (
+                   <li key={boost} style={{fontSize: '0.8em'}}>{boost}: {value > 0 ? '+' : ''}{value * 100}%</li> 
+                ))}
+              </ul>
+              <div style={{ marginTop: '5px'}}>
+                 <button onClick={() => unassignHero(assignedHero.id)} style={{ marginRight: '5px'}}>
+                    Unassign
+                 </button>
+                 <button onClick={() => setShowSkillView(!showSkillView)}>
+                     {showSkillView ? 'Hide Skills' : 'Show Skills'} ({assignedHero.skillPoints || 0} SP)
+                 </button>
+              </div>
 
-      {/* Assign Available Heroes */} 
-      {/* Only show assignment buttons if no hero is currently assigned */} 
-      {availableHeroes.length > 0 && !assignedHero && (
-         <div>
-            <h4>Assign a Hero:</h4>
-            {availableHeroes.map(hero => (
-                <button key={hero.id} onClick={() => assignHero(hero.id, city.id)}>
-                    Assign {hero.name}
-                </button>
-            ))}
-         </div>
-      )}
+              {/* Toggleable Skill View */} 
+              {showSkillView && (
+                 <HeroSkillView 
+                    hero={assignedHero} 
+                    allocateStatPoint={allocateStatPoint}
+                    learnHeroSkill={learnHeroSkill}
+                 />
+              )}
+            </div>
+          ) : (
+            <p>No hero assigned.</p>
+          )}
+
+          {/* Assign Available Heroes */} 
+          {availableHeroes.length > 0 && !assignedHero && (
+             <div>
+                <h4>Assign a Hero:</h4>
+                {availableHeroes.map(hero => (
+                    <button key={hero.id} onClick={() => assignHero(hero.id, city.id)}>
+                        Assign {hero.name} (L{hero.level} {hero.class})
+                    </button>
+                ))}
+             </div>
+          )}
+      </div>
 
       {/* Crafting Section (Integrated) */}
       <div className="city-crafting" style={{ marginTop: '15px', borderTop: '1px dashed #eee', paddingTop: '10px' }}>

@@ -25,12 +25,13 @@ export const WOODCUTTING_RESOURCES = {
 };
 
 export const CRAFTING_RECIPES = {
+    // Weapons
     bronzeSword: {
         name: 'Bronze Sword',
         skill: 'crafting',
         levelReq: 1,
         xpGain: 5,
-        cost: { copper: 10, birch: 5 }, // Use specific wood
+        cost: { copper: 10, birch: 5 },
         bonus: { attack: 1 } 
     },
     ironSword: {
@@ -38,10 +39,59 @@ export const CRAFTING_RECIPES = {
         skill: 'crafting',
         levelReq: 5,
         xpGain: 20,
-        cost: { iron: 15, oak: 10 }, // Use specific wood
+        cost: { iron: 15, oak: 10 }, 
         bonus: { attack: 3 }
     },
-    // Add armor later
+    // Bronze Armor Set
+    bronzeHelmet: {
+        name: 'Bronze Helmet',
+        skill: 'crafting',
+        levelReq: 2,
+        xpGain: 8,
+        cost: { copper: 8, birch: 3 },
+        bonus: { defense: 1 }
+    },
+     bronzeChestplate: {
+        name: 'Bronze Chestplate',
+        skill: 'crafting',
+        levelReq: 3,
+        xpGain: 15,
+        cost: { copper: 15, birch: 8 },
+        bonus: { defense: 3 }
+    },
+     bronzeBoots: {
+        name: 'Bronze Boots',
+        skill: 'crafting',
+        levelReq: 2,
+        xpGain: 6,
+        cost: { copper: 6, birch: 4 },
+        bonus: { defense: 1 }
+    },
+    // Iron Armor Set
+    ironHelmet: {
+        name: 'Iron Helmet',
+        skill: 'crafting',
+        levelReq: 6,
+        xpGain: 25,
+        cost: { iron: 12, oak: 5 },
+        bonus: { defense: 2 }
+    },
+    ironChestplate: {
+        name: 'Iron Chestplate',
+        skill: 'crafting',
+        levelReq: 8,
+        xpGain: 40,
+        cost: { iron: 25, oak: 15 },
+        bonus: { defense: 5 }
+    },
+    ironBoots: {
+        name: 'Iron Boots',
+        skill: 'crafting',
+        levelReq: 6,
+        xpGain: 20,
+        cost: { iron: 10, oak: 8 },
+        bonus: { defense: 2 }
+    },
 };
 
 // Function to calculate XP needed for next level (example curve)
@@ -112,4 +162,159 @@ export const COMBAT_ZONES = {
 // Map zone keys to their skill type (for potential future skill association)
 export const ZONE_SKILL_MAP = {
     ...Object.keys(COMBAT_ZONES).reduce((acc, key) => ({ ...acc, [key]: 'combat' }), {}),
+};
+
+// --- Hero System Data ---
+
+export const HERO_CLASSES = {
+    Warrior: {
+        name: 'Warrior',
+        mainStat: 'strength',
+        secondaryStat: 'dexterity',
+        description: 'Focuses on melee combat.'
+    },
+    Archer: {
+        name: 'Archer',
+        mainStat: 'dexterity',
+        secondaryStat: 'strength',
+        description: 'Focuses on ranged physical attacks.'
+    },
+    Wizard: {
+        name: 'Wizard',
+        mainStat: 'intelligence',
+        secondaryStat: 'dexterity',
+        description: 'Focuses on magical attacks.'
+    },
+    Farmer: {
+        name: 'Farmer',
+        mainStat: 'strength',
+        secondaryStat: 'dexterity',
+        description: 'Resource gathering focus.'
+    }
+    // Add more later
+};
+
+// Define how base stats convert to combat stats (examples)
+export const calculateHeroCombatStats = (hero) => {
+    // Defensive Check: Ensure hero and hero.stats exist
+    if (!hero || !hero.stats) {
+        console.warn("calculateHeroCombatStats called with invalid hero object:", hero);
+        // Return default zero stats to prevent crash
+        return {
+            attack: 0,
+            defense: 0,
+            magicAttack: 0, 
+            attackSpeed: 1, 
+            critChance: 0.05 
+        };
+    }
+
+    const stats = hero.stats; // Now safe to access
+    const level = hero.level;
+    let calculated = {
+        attack: 0,
+        defense: 0,
+        magicAttack: 0, 
+        attackSpeed: 1, 
+        critChance: 0.05
+    };
+
+    // Base contribution from stats
+    calculated.attack += (stats.strength * 1.5) + (stats.dexterity * 0.5); 
+    calculated.defense += (stats.strength * 0.5) + (stats.dexterity * 0.2);
+    calculated.magicAttack += (stats.intelligence * 2.0);
+    calculated.attackSpeed += (stats.dexterity * 0.02);
+    calculated.critChance += (stats.dexterity * 0.005);
+
+    // Bonus per level 
+    calculated.attack += (level - 1) * 1; 
+    calculated.defense += (level - 1) * 0.5;
+    calculated.magicAttack += (level -1) * 1; 
+
+    // TODO: Apply bonuses from learned skills
+
+    // Ensure non-negative
+    for (const key in calculated) {
+        calculated[key] = Math.max(0, calculated[key]);
+    }
+
+    return calculated;
+};
+
+export const HERO_SKILLS = {
+    // Warrior Skills
+    warriorSlash: {
+        name: 'Warrior Slash',
+        class: 'Warrior',
+        levelReq: 1,
+        cost: 1, // Skill point cost
+        maxLevel: 5,
+        description: 'Basic melee attack dealing STR-based damage.',
+        effect: { type: 'active_attack', damageMultiplier: 1.1, stat: 'strength' } // Example effect structure
+    },
+    heavyBlow: {
+        name: 'Heavy Blow',
+        class: 'Warrior',
+        levelReq: 3,
+        cost: 2,
+        maxLevel: 3,
+        description: 'A powerful strike, chance to stun.',
+        effect: { type: 'active_attack', damageMultiplier: 1.5, stat: 'strength', statusChance: 0.2, status: 'stun' }
+    },
+    // Archer Skills
+    preciseShot: {
+        name: 'Precise Shot',
+        class: 'Archer',
+        levelReq: 1,
+        cost: 1,
+        maxLevel: 5,
+        description: 'Basic ranged attack dealing DEX-based damage.',
+        effect: { type: 'active_attack', damageMultiplier: 1.1, stat: 'dexterity' }
+    },
+    // Wizard Skills
+    fireball: {
+        name: 'Fireball',
+        class: 'Wizard',
+        levelReq: 1,
+        cost: 1,
+        maxLevel: 5,
+        description: 'Hurl a ball of fire, dealing INT-based magic damage.',
+        effect: { type: 'active_magic_attack', damageMultiplier: 1.2, stat: 'intelligence' }
+    },
+    // Passive Example
+    weaponMastery: {
+        name: 'Weapon Mastery',
+        class: 'Warrior', // Or maybe available to multiple?
+        levelReq: 5,
+        cost: 3,
+        maxLevel: 1,
+        description: 'Increases physical attack damage by 10%.',
+        effect: { type: 'passive', targetStat: 'attack', multiplier: 1.1 }
+    }
+    // Add many more skills
+};
+
+// --- City Unlock Data ---
+export const NEXT_CITY_UNLOCK = {
+    cityId: 'city-2', // ID for the next city
+    name: 'Mountain Pass', // Name for the next city
+    requirements: {
+        playerSkills: { combat: 10 }, // Requires Combat Level 10
+        resources: { gold: 1000 }      // Requires 1000 Gold
+    },
+    cost: { // Cost deducted upon unlock
+        gold: 1000 
+    },
+    // Initial state for the new city upon unlock
+    initialState: {
+        level: 1,
+        population: 5,
+        workers: 2,
+        specialization: 'general',
+        combatStats: { attack: 0, defense: 0 },
+        currentTask: null,
+        assignedZone: null,
+        zoneProgress: 0,
+        buildings: { housing: 1 }
+    }
 }; 

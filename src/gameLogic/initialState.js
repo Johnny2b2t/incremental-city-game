@@ -1,69 +1,79 @@
 export const initialGameState = {
   resources: {
-    food: 10,
-    wood: 10,
-    stone: 5,
-    logs: 10,
-    birch: 0,
-    oak: 0,
+    food: 100,
+    wood: 100,
+    stone: 100,
+    logs: 100,
+    birch: 100,
+    oak: 50,
     maple: 0,
     redwood: 0,
-    feathers: 0,
-    pork: 0,
-    milk: 0,
-    gold: 0,
-    coal: 0,
-    copper: 0,
-    iron: 0,
+    feathers: 50,
+    pork: 50,
+    milk: 50,
+    gold: 100,
+    coal: 100,
+    copper: 50,
+    iron: 50,
   },
   playerSkills: {
-    mining: { level: 1, xp: 0 },
-    farming: { level: 1, xp: 0 },
-    woodcutting: { level: 1, xp: 0 },
-    crafting: { level: 1, xp: 0 },
-    combat: { level: 1, xp: 0 },
+    mining: { level: 5, xp: 0 },
+    farming: { level: 5, xp: 0 },
+    woodcutting: { level: 5, xp: 0 },
+    crafting: { level: 5, xp: 0 },
+    combat: { level: 5, xp: 0 },
   },
   heroes: [
     {
       id: 'hero-1',
       name: 'Guard Captain',
-      // Example boosts this hero might provide when assigned
+      class: 'Warrior',
+      level: 1,
+      xp: 0,
+      stats: { strength: 5, dexterity: 3, intelligence: 1 },
+      skillPoints: 0,
+      learnedSkills: {},
       boosts: {
-        combatPower: 5, // Flat combat power boost
-        miningYield: 0.1 // 10% boost to mining yield
+        miningYield: 0.1
       },
-      assignedCityId: null, // Which city they are currently boosting, or null
+      assignedCityId: 'city-1',
     },
     {
         id: 'hero-2',
         name: 'Farm Hand',
+        class: 'Farmer',
+        level: 1,
+        xp: 0,
+        stats: { strength: 2, dexterity: 2, intelligence: 1 },
+        skillPoints: 0,
+        learnedSkills: {},
         boosts: {
-          farmingYield: 0.15, // 15% boost to farming
-          foodConsumption: -0.05 // Reduces city food need by 5%?
+          farmingYield: 0.15,
+          foodConsumption: -0.05
         },
-        assignedCityId: null, 
+        assignedCityId: null,
       }
   ],
   cities: [
     {
       id: 'city-1',
-      name: 'First Outpost',
-      level: 1,
-      population: 10,
-      workers: 5, // Workers actively doing the city's main task
-      specialization: 'general', // Can be 'general', 'farming', 'mining', 'combat', etc.
+      name: 'Test Outpost',
+      level: 3,
+      population: 20,
+      workers: 10,
+      specialization: 'general',
       combatStats: {
-        attack: 0,
-        defense: 0,
+        attack: 5,
+        defense: 5,
       },
-      currentTask: 'mineCoal', // Specific task the city is performing (key from gameData.js)
-      assignedZone: null, // Key from COMBAT_ZONES or null
-      zoneProgress: 0,    // e.g., monsters defeated in current zone
+      currentTask: 'mineIron',
+      assignedZone: 'zoneGoblin',
+      zoneProgress: 0,
       buildings: {
-        housing: 1, // Example building
+        housing: 2,
       },
+      lastActiveTimestamp: null,
     },
   ],
-  // Add other global state if needed, e.g., game ticks, unlocked features
-  gameTick: 0, // Counter for game updates
+  gameTick: 0,
 }; 
